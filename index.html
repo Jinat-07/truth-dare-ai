@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truth or Dare AI</title>
+    <!-- Pulling in Tailwind CSS for modern styling without extra files -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* This handles the 3D card flip animation we planned */
+        .perspective { perspective: 1000px; }
+        .preserve-3d { transform-style: preserve-3d; transition: transform 0.6s; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col items-center justify-center p-4 font-sans text-gray-800">
+
+    <!-- Main Container -->
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col items-center p-8">
+        
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">AI Truth or Dare</h1>
+        <p class="text-gray-500 mb-8 text-center text-sm">Generate custom prompts and magically flip Truths into Dares.</p>
+
+        <!-- The Flip Card Area (Placeholder for now) -->
+        <div class="w-full h-64 perspective mb-8 cursor-pointer group">
+            <div id="card-inner" class="relative w-full h-full preserve-3d">
+                
+                <!-- Front of Card (Truth) -->
+                <div class="absolute w-full h-full backface-hidden bg-blue-50 border-2 border-blue-200 rounded-xl flex flex-col items-center justify-center p-6 text-center">
+                    <span class="text-blue-500 font-semibold tracking-wider text-sm uppercase mb-2">Truth</span>
+                    <p id="prompt-text-front" class="text-lg font-medium text-gray-800">What is the most embarrassing text you've sent recently?</p>
+                </div>
+
+                <!-- Back of Card (Dare) -->
+                <div class="absolute w-full h-full backface-hidden rotate-y-180 bg-red-50 border-2 border-red-200 rounded-xl flex flex-col items-center justify-center p-6 text-center">
+                    <span class="text-red-500 font-semibold tracking-wider text-sm uppercase mb-2">Dare</span>
+                    <p id="prompt-text-back" class="text-lg font-medium text-gray-800">Send an embarrassing text to the third person in your contacts.</p>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Controls Area -->
+        <div class="w-full flex gap-4">
+            <button class="flex-1 bg-gray-900 text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors">
+                New Prompt
+            </button>
+            <button id="convert-btn" class="flex-1 bg-gradient-to-r from-blue-500 to-red-500 text-white py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+                Convert to Dare
+            </button>
+        </div>
+
+    </div>
+
+</body>
+</html>
