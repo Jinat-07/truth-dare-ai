@@ -1,13 +1,7 @@
 // ==========================================
-// GROQ AI CONFIGURATION
+// REAL GROQ AI BACKEND ENDPOINT
 // ==========================================
-// Paste your NEW Groq API key in REVERSE order below so GitHub doesn't auto-revoke it
-const REVERSED_GROQ_KEY = "dvO7sj638Q1wcTxYzk5cNymZYF3bydGWe6graxBdySXR3gT5bEfv_ksg";
-const GROQ_API_KEY = REVERSED_GROQ_KEY.split("").reverse().join("");
-
-const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
-const PRIMARY_MODEL = "llama-3.3-70b-versatile";
-const FALLBACK_MODEL = "llama-3.1-8b-instant";
+const GROQ_PROXY_URL = "https://script.google.com/macros/s/AKfycbz3X0rajyTiy0-9qMlkEdaJiv-od4T5ktulvA2EXXw2IWU-hrduzksEqoqqc5Q620REeQ/exec";
 
 // ==========================================
 // DOM ELEMENTS
@@ -43,9 +37,9 @@ const toast = document.getElementById("toast");
 // ==========================================
 // APPLICATION STATE
 // ==========================================
-let isFlipped = false;
+let isFlipped = false; // false = Truth (Front), true = Dare (Back)
 let selectedVibe = "friendly";
-let customSourceType = "truth";
+let customSourceType = "truth"; // "truth" or "dare"
 let recentPrompts = [];
 let sessionHistory = [];
 
@@ -59,7 +53,7 @@ function showToast(message) {
     setTimeout(() => {
         toast.classList.remove("opacity-100");
         toast.classList.add("opacity-0");
-    }, 3000);
+    }, 2800);
 }
 
 function setCardSide(showDare) {
@@ -80,6 +74,7 @@ function toggleCard() {
 convertBtn.addEventListener("click", toggleCard);
 cardInner.addEventListener("click", toggleCard);
 
+// Mode Switcher
 tabGenerate.addEventListener("click", () => {
     tabGenerate.className = "mode-tab py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold bg-white text-blue-600 shadow-sm transition-all";
     tabConvert.className = "mode-tab py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-all";
@@ -94,6 +89,7 @@ tabConvert.addEventListener("click", () => {
     panelGenerate.classList.add("hidden");
 });
 
+// Preset Subject Chips
 presetChips.forEach(chip => {
     chip.addEventListener("click", () => {
         subjectInput.value = chip.getAttribute("data-topic");
@@ -101,6 +97,7 @@ presetChips.forEach(chip => {
     });
 });
 
+// Vibe Selection
 vibeButtons.forEach(button => {
     button.addEventListener("click", () => {
         vibeButtons.forEach(btn => {
@@ -111,6 +108,7 @@ vibeButtons.forEach(button => {
     });
 });
 
+// Custom Converter Source Selector
 sourceTypeButtons.forEach(button => {
     button.addEventListener("click", () => {
         sourceTypeButtons.forEach(btn => {
@@ -127,6 +125,7 @@ sourceTypeButtons.forEach(button => {
     });
 });
 
+// Copy Card Text
 copyBtn.addEventListener("click", async () => {
     const activeLabel = isFlipped ? "DARE" : "TRUTH";
     const activeText = isFlipped ? backText.textContent.trim() : frontText.textContent.trim();
@@ -142,6 +141,7 @@ copyBtn.addEventListener("click", async () => {
     }
 });
 
+// Session History
 function addToHistory(truth, dare, label) {
     sessionHistory.unshift({ truth, dare, label });
     if (sessionHistory.length > 6) sessionHistory.pop();
@@ -183,78 +183,79 @@ clearHistoryBtn.addEventListener("click", () => {
 });
 
 // ==========================================
-// GROQ API ENGINE (WITH CLEAR DIAGNOSTICS)
+// PURE GROQ AI REQUEST ENGINE
 // ==========================================
-async function callGroqAPI(systemInstruction, userPrompt, model = PRIMARY_MODEL) {
-    if (!GROQ_API_KEY.startsWith("gsk_")) {
-        throw new Error("Invalid API key setup in app.js (check reversed string).");
+async function callGroqBackend(systemPrompt, userPrompt) {
+    if (!GROQ_PROXY_URL.startsWith("https://script.google.com/")) {
+        throw new Error("Paste your Google Apps Script /exec URL into line 4 of app.js.");
     }
 
-    const response = await fetch(GROQ_ENDPOINT, {
+    // Sent without custom JSON header so browser skips CORS preflight on Apps Script
+    const response = await fetch(GROQ_PROXY_URL, {
         method: "POST",
-        headers: {
-            "Authorization": `Bearer ${GROQ_API_KEY}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            model: model,
-            messages: [
-                { role: "system", content: systemInstruction },
-                { role: "user", content: userPrompt }
-            ],
-            temperature: 0.85,
-            max_tokens: 300
-        })
+        body: JSON.stringify({ systemPrompt, userPrompt })
     });
 
     if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
-        const errMsg = errBody?.error?.message || `HTTP ${response.status}`;
-        if (model === PRIMARY_MODEL && response.status !== 401) {
-            return callGroqAPI(systemInstruction, userPrompt, FALLBACK_MODEL);
-        }
-        throw new Error(errMsg);
+        throw new Error(`Relay HTTP Error: ${response.status}`);
     }
 
     const data = await response.json();
-    const rawContent = data.choices[0].message.content.trim();
-    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("AI did not return valid JSON.");
-    return JSON.parse(jsonMatch[0]);
+
+    if (data.error) {
+        throw new Error(data.error.message || "Groq API returned an error.");
+    }
+
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+        throw new Error("Empty response from Groq AI.");
+    }
+
+    const parsed = JSON.parse(content.trim());
+    if (!parsed.truth || !parsed.dare) {
+        throw new Error("Malformed JSON returned by AI.");
+    }
+
+    return parsed;
 }
 
-// 1. Generate Subject-Based Truth & Dare Pair
+// ==========================================
+// 1. GENERATE SUBJECT-BASED TRUTH & DARE
+// ==========================================
 async function generatePair() {
     const subject = subjectInput.value.trim() || "Friends Hanging Out";
 
     generateBtn.disabled = true;
-    generateBtn.innerHTML = `<span class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> <span>Generating...</span>`;
+    generateBtn.innerHTML = `<span class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> <span>Generating with Groq AI...</span>`;
 
     setCardSide(false);
-    frontText.textContent = "Crafting a custom Truth... ✨";
-    backText.textContent = "Pairing a matching Dare... 🎲";
+    frontText.textContent = "Groq AI is crafting a custom Truth... ✨";
+    backText.textContent = "Groq AI is pairing a matching Dare... 🎲";
 
     const avoidClause = recentPrompts.length > 0
-        ? `Avoid repeating these recent prompts: ${recentPrompts.slice(-5).join(" | ")}.`
+        ? `Avoid repeating or paraphrasing these recent prompts: ${recentPrompts.slice(-6).join(" | ")}.`
         : "";
 
-    const systemPrompt = `You are a party game designer. Generate one engaging 'Truth' question and one linked 'Dare' challenge on the same theme. Keep each 1-2 punchy sentences, natural, and safe. Respond ONLY with raw JSON: {"truth": "...", "dare": "..."}`;
+    const systemPrompt = `You are a sharp, creative party game designer. Generate one engaging, original 'Truth' question and one tightly linked 'Dare' challenge on the exact same theme so players can seamlessly switch between them.
+Rules:
+- Make them specific to the subject and intensity level, never generic.
+- Keep each 1-2 punchy sentences, natural, and playable in person.
+- Keep everything safe and non-harmful.
+- Output strictly valid JSON with keys "truth" and "dare".`;
 
-    const userPrompt = `Subject: "${subject}", Vibe: "${selectedVibe}". ${avoidClause}`;
+    const userPrompt = `Subject/Topic: "${subject}", Vibe/Intensity: "${selectedVibe}". ${avoidClause}`;
 
     try {
-        const result = await callGroqAPI(systemPrompt, userPrompt);
-        if (!result.truth || !result.dare) throw new Error("Missing fields in AI response.");
-
+        const result = await callGroqBackend(systemPrompt, userPrompt);
         frontText.textContent = result.truth;
         backText.textContent = result.dare;
 
         recentPrompts.push(result.truth);
         addToHistory(result.truth, result.dare, subject);
     } catch (error) {
-        console.error("Groq Error:", error);
-        frontText.textContent = `Error: ${error.message}`;
-        backText.textContent = `Error: ${error.message}`;
+        console.error(error);
+        frontText.textContent = `AI Error: ${error.message}`;
+        backText.textContent = `AI Error: ${error.message}`;
         showToast(error.message);
     } finally {
         generateBtn.disabled = false;
@@ -266,7 +267,9 @@ async function generatePair() {
     }
 }
 
-// 2. Convert User's Custom Truth <-> Dare
+// ==========================================
+// 2. CONVERT CUSTOM TRUTH <-> DARE
+// ==========================================
 async function convertCustomPrompt() {
     const userText = customPromptInput.value.trim();
     if (!userText) {
@@ -276,7 +279,7 @@ async function convertCustomPrompt() {
     }
 
     customConvertBtn.disabled = true;
-    customConvertBtn.textContent = "Converting...";
+    customConvertBtn.textContent = "Converting with Groq AI...";
 
     const targetSideIsDare = customSourceType === "truth";
 
@@ -290,14 +293,14 @@ async function convertCustomPrompt() {
         setCardSide(false);
     }
 
-    const systemPrompt = `You are a Truth or Dare converter. Given a Truth, create an equivalent actionable Dare on the exact same subject. Given a Dare, create a revealing Truth question on the exact same subject. Keep it 1-2 sentences and safe. Respond ONLY with raw JSON: {"truth": "...", "dare": "..."}`;
+    const systemPrompt = `You are a clever Truth or Dare converter. Given a Truth, create an equivalent, actionable Dare on the exact same subject. Given a Dare, create a revealing Truth question on the exact same subject. Keep it 1-2 punchy sentences and safe. Output strictly valid JSON: {"truth": "...", "dare": "..."}`;
 
     const userPrompt = customSourceType === "truth"
         ? `Original Truth: "${userText}". Keep "truth" identical and generate a matching "dare".`
         : `Original Dare: "${userText}". Keep "dare" identical and generate a matching "truth".`;
 
     try {
-        const result = await callGroqAPI(systemPrompt, userPrompt);
+        const result = await callGroqBackend(systemPrompt, userPrompt);
         const finalTruth = customSourceType === "truth" ? userText : result.truth;
         const finalDare = customSourceType === "dare" ? userText : result.dare;
 
@@ -305,9 +308,9 @@ async function convertCustomPrompt() {
         backText.textContent = finalDare;
         addToHistory(finalTruth, finalDare, "Converted");
     } catch (error) {
-        console.error("Conversion Error:", error);
-        if (targetSideIsDare) backText.textContent = `Error: ${error.message}`;
-        else frontText.textContent = `Error: ${error.message}`;
+        console.error(error);
+        if (targetSideIsDare) backText.textContent = `AI Error: ${error.message}`;
+        else frontText.textContent = `AI Error: ${error.message}`;
         showToast(error.message);
     } finally {
         customConvertBtn.disabled = false;
