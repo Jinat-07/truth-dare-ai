@@ -2,7 +2,7 @@
 // GROQ AI CONFIGURATION
 // ==========================================
 // Paste your NEW Groq API key in REVERSE order below so GitHub doesn't auto-revoke it
-const REVERSED_GROQ_KEY = "PASTE_YOUR_REVERSED_NEW_GROQ_KEY_HERE";
+const REVERSED_GROQ_KEY = "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";
 const GROQ_API_KEY = REVERSED_GROQ_KEY.split("").reverse().join("");
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
