@@ -53,7 +53,7 @@ function showToast(message) {
     setTimeout(() => {
         toast.classList.remove("opacity-100");
         toast.classList.add("opacity-0");
-    }, 2800);
+    }, 3000);
 }
 
 function setCardSide(showDare) {
@@ -183,46 +183,70 @@ clearHistoryBtn.addEventListener("click", () => {
 });
 
 // ==========================================
-// GROQ AI REQUEST ENGINE (APPS SCRIPT GET)
+// JSONP GROQ RELAY (IMMUNE TO CORS & BRAVE BLOCKS)
 // ==========================================
-async function callGroqBackend(systemPrompt, userPrompt) {
-    if (!GROQ_PROXY_URL.startsWith("https://script.google.com/")) {
-        throw new Error("Paste your Google Apps Script /exec URL into line 4 of app.js.");
-    }
+function callGroqBackend(systemPrompt, userPrompt) {
+    return new Promise((resolve, reject) => {
+        if (!GROQ_PROXY_URL.startsWith("https://script.google.com/")) {
+            reject(new Error("Paste your Google Apps Script /exec URL into line 4 of app.js."));
+            return;
+        }
 
-    const requestUrl = `${GROQ_PROXY_URL}?system=${encodeURIComponent(systemPrompt)}&user=${encodeURIComponent(userPrompt)}&_t=${Date.now()}`;
+        const callbackName = "__groqCb_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+        const script = document.createElement("script");
 
-    const response = await fetch(requestUrl, {
-        method: "GET",
-        redirect: "follow"
+        const timeoutId = setTimeout(() => {
+            cleanup();
+            reject(new Error("Request timed out. Check your internet or Apps Script URL."));
+        }, 15000);
+
+        function cleanup() {
+            clearTimeout(timeoutId);
+            delete window[callbackName];
+            if (script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[callbackName] = function (data) {
+            cleanup();
+            try {
+                if (!data) {
+                    reject(new Error("Empty response from server."));
+                    return;
+                }
+                if (data.error) {
+                    reject(new Error(data.error.message || "Groq API error."));
+                    return;
+                }
+                const content = data.choices?.[0]?.message?.content;
+                if (!content) {
+                    reject(new Error("No AI text returned."));
+                    return;
+                }
+                const jsonMatch = content.trim().match(/\{[\s\S]*\}/);
+                if (!jsonMatch) {
+                    reject(new Error("Invalid JSON format from AI."));
+                    return;
+                }
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (!parsed.truth || !parsed.dare) {
+                    reject(new Error("Missing truth/dare fields."));
+                    return;
+                }
+                resolve(parsed);
+            } catch (err) {
+                reject(err);
+            }
+        };
+
+        script.onerror = function () {
+            cleanup();
+            reject(new Error("Apps Script blocked: set 'Who has access' to 'Anyone' and use the /exec URL."));
+        };
+
+        const url = `${GROQ_PROXY_URL}?callback=${callbackName}&system=${encodeURIComponent(systemPrompt)}&user=${encodeURIComponent(userPrompt)}&_t=${Date.now()}`;
+        script.src = url;
+        document.body.appendChild(script);
     });
-
-    if (!response.ok) {
-        throw new Error(`Relay HTTP Error: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.error) {
-        throw new Error(data.error.message || "Groq API returned an error.");
-    }
-
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) {
-        throw new Error("Empty response from Groq AI.");
-    }
-
-    const jsonMatch = content.trim().match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-        throw new Error("Malformed JSON returned by AI.");
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (!parsed.truth || !parsed.dare) {
-        throw new Error("Missing truth or dare fields in AI response.");
-    }
-
-    return parsed;
 }
 
 // ==========================================
@@ -239,14 +263,14 @@ async function generatePair() {
     backText.textContent = "Groq AI is pairing a matching Dare... 🎲";
 
     const avoidClause = recentPrompts.length > 0
-        ? `Avoid repeating or paraphrasing these recent prompts: ${recentPrompts.slice(-6).join(" | ")}.`
+        ? `Avoid repeating these recent prompts: ${recentPrompts.slice(-6).join(" | ")}.`
         : "";
 
-    const systemPrompt = `You are a sharp, creative party game designer. Generate one engaging, original 'Truth' question and one tightly linked 'Dare' challenge on the exact same theme so players can seamlessly switch between them.
+    const systemPrompt = `You are a sharp, creative party game designer. Generate one engaging, original 'Truth' question and one tightly linked 'Dare' challenge on the exact same theme so players can switch between them.
 Rules:
-- Make them specific to the subject and intensity level, never generic.
-- Keep each 1-2 punchy sentences, natural, and playable in person.
-- Keep everything safe and non-harmful.
+- Specific to the subject and intensity level, never generic.
+- 1-2 punchy sentences each, natural and playable in person.
+- Safe and non-harmful.
 - Output strictly valid JSON with keys "truth" and "dare".`;
 
     const userPrompt = `Subject/Topic: "${subject}", Vibe/Intensity: "${selectedVibe}". ${avoidClause}`;
