@@ -1,5 +1,5 @@
 // ==========================================
-// REAL GROQ AI BACKEND ENDPOINT
+// GOOGLE APPS SCRIPT GROQ RELAY ENDPOINT
 // ==========================================
 const GROQ_PROXY_URL = "https://script.google.com/macros/s/AKfycbz3X0rajyTiy0-9qMlkEdaJiv-od4T5ktulvA2EXXw2IWU-hrduzksEqoqqc5Q620REeQ/exec";
 
@@ -183,17 +183,18 @@ clearHistoryBtn.addEventListener("click", () => {
 });
 
 // ==========================================
-// PURE GROQ AI REQUEST ENGINE
+// GROQ AI REQUEST ENGINE (APPS SCRIPT GET)
 // ==========================================
 async function callGroqBackend(systemPrompt, userPrompt) {
     if (!GROQ_PROXY_URL.startsWith("https://script.google.com/")) {
         throw new Error("Paste your Google Apps Script /exec URL into line 4 of app.js.");
     }
 
-    // Sent without custom JSON header so browser skips CORS preflight on Apps Script
-    const response = await fetch(GROQ_PROXY_URL, {
-        method: "POST",
-        body: JSON.stringify({ systemPrompt, userPrompt })
+    const requestUrl = `${GROQ_PROXY_URL}?system=${encodeURIComponent(systemPrompt)}&user=${encodeURIComponent(userPrompt)}&_t=${Date.now()}`;
+
+    const response = await fetch(requestUrl, {
+        method: "GET",
+        redirect: "follow"
     });
 
     if (!response.ok) {
@@ -211,9 +212,14 @@ async function callGroqBackend(systemPrompt, userPrompt) {
         throw new Error("Empty response from Groq AI.");
     }
 
-    const parsed = JSON.parse(content.trim());
-    if (!parsed.truth || !parsed.dare) {
+    const jsonMatch = content.trim().match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
         throw new Error("Malformed JSON returned by AI.");
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!parsed.truth || !parsed.dare) {
+        throw new Error("Missing truth or dare fields in AI response.");
     }
 
     return parsed;
